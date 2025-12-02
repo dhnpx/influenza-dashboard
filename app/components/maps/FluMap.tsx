@@ -7,6 +7,8 @@ import type { Layer } from 'leaflet';
 import { getStateCode } from '@/lib/utils/stateCodes';
 import { getColorForValue } from '@/lib/utils/mapColors';
 import { parseNumeric } from '@/lib/utils/formatters';
+import { ProcessedWastewaterData } from '@/types/wastewater';
+import { getLatestWastewaterByState } from '@/lib/utils/wastewaterProcessing';
 import 'leaflet/dist/leaflet.css';
 
 interface FluMapProps {
@@ -16,10 +18,12 @@ interface FluMapProps {
     totalconfflunewadm?: string;
     totalconfflunewadmper100k?: string;
   }>;
-  metric?: 'patients' | 'admissions' | 'per100k';
+  wastewaterData?: ProcessedWastewaterData[];
+  metric?: 'patients' | 'admissions' | 'per100k' | 'wastewater';
+  onStateClick?: (stateCode: string, stateName: string) => void;
 }
 
-export default function FluMap({ data, metric = 'per100k' }: FluMapProps) {
+export default function FluMap({ data, wastewaterData = [], metric = 'per100k', onStateClick }: FluMapProps) {
   const [geoData, setGeoData] = useState<GeoJsonObject | null>(null);
   const [isClient, setIsClient] = useState(false);
 
@@ -32,27 +36,41 @@ export default function FluMap({ data, metric = 'per100k' }: FluMapProps) {
       .catch(err => console.error('Error loading GeoJSON:', err));
   }, []);
 
+  // Create wastewater data lookup
+  const wastewaterByState = useMemo(() => {
+    if (metric !== 'wastewater' || wastewaterData.length === 0) return new Map();
+    return getLatestWastewaterByState(wastewaterData);
+  }, [wastewaterData, metric]);
+
   // Create state data lookup
   const stateData = useMemo(() => {
     const lookup: Record<string, number> = {};
 
-    data.forEach(item => {
-      const code = item.jurisdiction;
-      let value = 0;
+    if (metric === 'wastewater') {
+      // Use wastewater data
+      wastewaterByState.forEach((value, stateCode) => {
+        lookup[stateCode] = value.viralConcentration;
+      });
+    } else {
+      // Use clinical data
+      data.forEach(item => {
+        const code = item.jurisdiction;
+        let value = 0;
 
-      if (metric === 'patients') {
-        value = parseNumeric(item.totalconffluhosppats || '0');
-      } else if (metric === 'admissions') {
-        value = parseNumeric(item.totalconfflunewadm || '0');
-      } else {
-        value = parseNumeric(item.totalconfflunewadmper100k || '0');
-      }
+        if (metric === 'patients') {
+          value = parseNumeric(item.totalconffluhosppats || '0');
+        } else if (metric === 'admissions') {
+          value = parseNumeric(item.totalconfflunewadm || '0');
+        } else {
+          value = parseNumeric(item.totalconfflunewadmper100k || '0');
+        }
 
-      lookup[code] = value;
-    });
+        lookup[code] = value;
+      });
+    }
 
     return lookup;
-  }, [data, metric]);
+  }, [data, metric, wastewaterByState]);
 
   // Style function for each state
   const getStateStyle = (feature?: Feature) => {
@@ -61,7 +79,7 @@ export default function FluMap({ data, metric = 'per100k' }: FluMapProps) {
     const value = stateCode ? stateData[stateCode] || 0 : 0;
 
     return {
-      fillColor: getColorForValue(value),
+      fillColor: getColorForValue(value, metric),
       fillOpacity: 0.7,
       color: '#374151',
       weight: 1,
@@ -74,15 +92,25 @@ export default function FluMap({ data, metric = 'per100k' }: FluMapProps) {
     const stateCode = getStateCode(stateName);
     const value = stateCode ? stateData[stateCode] || 0 : 0;
 
-    const metricLabel =
-      metric === 'patients'
-        ? 'Hospital Patients'
-        : metric === 'admissions'
-        ? 'New Admissions'
-        : 'Admissions per 100k';
+    let metricLabel = '';
+    let displayValue = '';
+
+    if (metric === 'wastewater') {
+      metricLabel = 'Viral Concentration';
+      displayValue = value > 0 ? `${value.toFixed(0)} copies/L` : 'No data';
+    } else if (metric === 'patients') {
+      metricLabel = 'Hospital Patients';
+      displayValue = value.toFixed(0);
+    } else if (metric === 'admissions') {
+      metricLabel = 'New Admissions';
+      displayValue = value.toFixed(0);
+    } else {
+      metricLabel = 'Admissions per 100k';
+      displayValue = value.toFixed(2);
+    }
 
     layer.bindTooltip(
-      `<strong>${stateName}</strong><br/>${metricLabel}: ${value.toFixed(2)}`,
+      `<strong>${stateName}</strong><br/>${metricLabel}: ${displayValue}`,
       {
         sticky: true,
       }
@@ -105,19 +133,24 @@ export default function FluMap({ data, metric = 'per100k' }: FluMapProps) {
           fillOpacity: 0.7,
         });
       },
+      click: () => {
+        if (onStateClick && stateCode) {
+          onStateClick(stateCode, stateName);
+        }
+      },
     });
   };
 
   if (!isClient || !geoData) {
     return (
-      <div className="w-full h-[500px] bg-gray-100 rounded-lg flex items-center justify-center">
+      <div className="w-full h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
         <div className="text-gray-500">Loading map...</div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-[500px] rounded-lg overflow-hidden shadow-lg">
+    <div className="w-full h-[600px] rounded-lg overflow-hidden shadow-lg">
       <MapContainer
         center={[37.8, -96]}
         zoom={4}
