@@ -14,6 +14,21 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
+import dynamic from 'next/dynamic';
+
+// Dynamic import for map to avoid SSR issues with Leaflet
+const FluMap = dynamic(() => import('./components/maps/FluMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[500px] bg-gray-100 rounded-lg flex items-center justify-center">
+      <div className="text-gray-500">Loading map...</div>
+    </div>
+  ),
+});
+
+const MapLegend = dynamic(() => import('./components/maps/MapLegend'), {
+  ssr: false,
+});
 
 // Register ChartJS components
 ChartJS.register(
@@ -32,11 +47,14 @@ type CDCData = {
   jurisdiction: string;
   totalconffluhosppats?: string;
   totalconfflunewadm?: string;
+  totalconfflunewadmper100k?: string;
   pctconffluinptbeds?: string;
 };
 
 export default function Dashboard() {
-  const [cdcData, setCdcData] = useState<CDCData[]>([]);
+  // Separate state for chart (national data) and map (all states)
+  const [nationalData, setNationalData] = useState<CDCData[]>([]);
+  const [stateData, setStateData] = useState<CDCData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState('12'); // 12 weeks by default
@@ -45,12 +63,22 @@ export default function Dashboard() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/cdc');
-        if (!response.ok) {
-          throw new Error('Failed to fetch data');
+
+        // Fetch national data for chart (USA only, 1 year = 52 weeks)
+        const nationalResponse = await fetch('/api/cdc?jurisdiction=USA&limit=52');
+        if (!nationalResponse.ok) {
+          throw new Error('Failed to fetch national data');
         }
-        const data = await response.json();
-        setCdcData(data);
+        const national = await nationalResponse.json();
+        setNationalData(national);
+
+        // Fetch all state data for map (limit 500 for ~7-8 weeks)
+        const stateResponse = await fetch('/api/cdc?limit=500');
+        if (!stateResponse.ok) {
+          throw new Error('Failed to fetch state data');
+        }
+        const states = await stateResponse.json();
+        setStateData(states);
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load data. Please try again later.');
@@ -62,9 +90,7 @@ export default function Dashboard() {
     fetchData();
   }, []);
 
-  // Process data for charts - aggregate by week (national level)
-  const nationalData = cdcData.filter(item => item.jurisdiction === 'USA');
-
+  // Process data for charts - use nationalData (already filtered to USA)
   const filteredData = nationalData
     .sort((a, b) => new Date(a.weekendingdate).getTime() - new Date(b.weekendingdate).getTime())
     .slice(-parseInt(timeRange));
@@ -233,6 +259,24 @@ export default function Dashboard() {
               <div className="h-96">
                 <Line data={chartData} options={chartOptions} />
               </div>
+            </div>
+
+            {/* Geographic Heat Map */}
+            <div className="mt-8 bg-white shadow rounded-lg p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-medium text-gray-900">Geographic Distribution</h2>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="lg:col-span-3">
+                  <FluMap data={stateData} metric="per100k" />
+                </div>
+                <div className="lg:col-span-1">
+                  <MapLegend />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-4">
+                Showing new flu admissions per 100,000 population by state. Hover over states for details.
+              </p>
             </div>
 
             {/* Additional Data Section */}
