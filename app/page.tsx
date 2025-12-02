@@ -15,6 +15,9 @@ import {
   Filler,
 } from 'chart.js';
 import dynamic from 'next/dynamic';
+import MetricCard from './components/ui/MetricCard';
+import { calculateWeekOverWeekChange, getTrendDirection, calculatePercentage, getDominantCategory } from '@/lib/utils/calculations';
+import { parseNumeric } from '@/lib/utils/formatters';
 
 // Dynamic import for map to avoid SSR issues with Leaflet
 const FluMap = dynamic(() => import('./components/maps/FluMap'), {
@@ -49,6 +52,19 @@ type CDCData = {
   totalconfflunewadm?: string;
   totalconfflunewadmper100k?: string;
   pctconffluinptbeds?: string;
+  totalconffluicupats?: string;
+  pcticubedsocc?: string;
+  pctinptbedsocc?: string;
+  totalconfflunewadmped?: string;
+  totalconfflunewadmadult?: string;
+  totalconfc19hosppats?: string;
+  totalconfrsvhosppats?: string;
+  numconfflunewadmped0to4?: string;
+  numconfflunewadmped5to17?: string;
+  numconfflunewadmadult18to49?: string;
+  numconfflunewadmadult50to64?: string;
+  numconfflunewadmadult65to74?: string;
+  numconfflunewadmadult75plus?: string;
 };
 
 export default function Dashboard() {
@@ -139,6 +155,72 @@ export default function Dashboard() {
 
   // Get latest data point for national data
   const latestData = nationalData[nationalData.length - 1];
+  const previousWeekData = nationalData[nationalData.length - 2];
+
+  // Calculate metrics for cards
+  const calculateMetrics = () => {
+    if (!latestData) return null;
+
+    // Total Flu Patients
+    const totalPatients = parseNumeric(latestData.totalconffluhosppats || '0');
+    const prevTotalPatients = previousWeekData ? parseNumeric(previousWeekData.totalconffluhosppats || '0') : totalPatients;
+    const patientsTrend = calculateWeekOverWeekChange(totalPatients, prevTotalPatients);
+
+    // New Admissions
+    const newAdmissions = parseNumeric(latestData.totalconfflunewadm || '0');
+    const prevNewAdmissions = previousWeekData ? parseNumeric(previousWeekData.totalconfflunewadm || '0') : newAdmissions;
+    const admissionsTrend = calculateWeekOverWeekChange(newAdmissions, prevNewAdmissions);
+
+    // ICU Occupancy
+    const icuPatients = parseNumeric(latestData.totalconffluicupats || '0');
+    const icuOccupancy = parseNumeric(latestData.pcticubedsocc || '0') * 100;
+
+    // Bed Utilization
+    const bedUtilization = parseNumeric(latestData.pctinptbedsocc || '0') * 100;
+
+    // Age Group Analysis
+    const ageGroups = {
+      '0-4': parseNumeric(latestData.numconfflunewadmped0to4 || '0'),
+      '5-17': parseNumeric(latestData.numconfflunewadmped5to17 || '0'),
+      '18-49': parseNumeric(latestData.numconfflunewadmadult18to49 || '0'),
+      '50-64': parseNumeric(latestData.numconfflunewadmadult50to64 || '0'),
+      '65-74': parseNumeric(latestData.numconfflunewadmadult65to74 || '0'),
+      '75+': parseNumeric(latestData.numconfflunewadmadult75plus || '0'),
+    };
+    const dominantAgeGroup = getDominantCategory(ageGroups);
+
+    // Multi-virus comparison
+    const fluCount = totalPatients;
+    const covidCount = parseNumeric(latestData.totalconfc19hosppats || '0');
+    const rsvCount = parseNumeric(latestData.totalconfrsvhosppats || '0');
+    const totalVirus = fluCount + covidCount + rsvCount;
+    const fluPercentage = totalVirus > 0 ? (fluCount / totalVirus) * 100 : 0;
+
+    return {
+      totalPatients,
+      patientsTrend: {
+        value: patientsTrend,
+        direction: getTrendDirection(patientsTrend),
+      },
+      newAdmissions,
+      admissionsTrend: {
+        value: admissionsTrend,
+        direction: getTrendDirection(admissionsTrend),
+      },
+      icuPatients,
+      icuOccupancy,
+      bedUtilization,
+      dominantAgeGroup,
+      virusComparison: {
+        flu: fluCount,
+        covid: covidCount,
+        rsv: rsvCount,
+        fluPercentage,
+      },
+    };
+  };
+
+  const metrics = calculateMetrics();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -171,73 +253,87 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 gap-5 mt-6 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="overflow-hidden bg-white rounded-lg shadow">
-                <div className="p-5">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Latest Update</dt>
-                        <dd className="flex items-baseline">
-                          <div className="text-2xl font-semibold text-gray-900">
-                            {latestData ? format(new Date(latestData.weekendingdate), 'MMM d') : 'N/A'}
-                          </div>
-                        </dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {/* Enhanced Metric Cards */}
+            <div className="grid grid-cols-1 gap-5 mt-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              {/* Card 1: Total Flu Patients */}
+              <MetricCard
+                title="Flu Patients"
+                value={metrics?.totalPatients.toLocaleString() || 'N/A'}
+                subtitle={latestData ? `Week of ${format(new Date(latestData.weekendingdate), 'MMM d')}` : ''}
+                color="blue"
+                icon={
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                }
+              />
 
-              <div className="overflow-hidden bg-white rounded-lg shadow">
-                <div className="p-5">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <svg className="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                      </svg>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Hospital Patients</dt>
-                        <dd className="flex items-baseline">
-                          <div className="text-2xl font-semibold text-gray-900">
-                            {latestData?.totalconffluhosppats || 'N/A'}
-                          </div>
-                        </dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {/* Card 2: New Admissions */}
+              <MetricCard
+                title="New Admissions"
+                value={metrics?.newAdmissions.toLocaleString() || 'N/A'}
+                subtitle="This week"
+                color="green"
+                icon={
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                }
+              />
 
-              <div className="overflow-hidden bg-white rounded-lg shadow">
-                <div className="p-5">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <svg className="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                      </svg>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">New Admissions</dt>
-                        <dd className="flex items-baseline">
-                          <div className="text-2xl font-semibold text-gray-900">
-                            {latestData?.totalconfflunewadm || 'N/A'}
-                          </div>
-                        </dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {/* Card 3: ICU Occupancy */}
+              <MetricCard
+                title="ICU Patients"
+                value={metrics?.icuPatients.toLocaleString() || 'N/A'}
+                subtitle="Flu in ICU"
+                progress={metrics?.icuOccupancy}
+                color="orange"
+                icon={
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                  </svg>
+                }
+              />
+
+              {/* Card 4: Bed Utilization */}
+              <MetricCard
+                title="Bed Utilization"
+                value={`${metrics?.bedUtilization.toFixed(1)}%` || 'N/A'}
+                subtitle="Inpatient beds occupied"
+                progress={metrics?.bedUtilization}
+                color={metrics && metrics.bedUtilization > 80 ? 'red' : 'purple'}
+                icon={
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                }
+              />
+
+              {/* Card 5: Age Group Alert */}
+              <MetricCard
+                title="Highest Risk Group"
+                value={metrics?.dominantAgeGroup || 'N/A'}
+                subtitle="Age group (years)"
+                color="gray"
+                icon={
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                }
+              />
+
+              {/* Card 6: Multi-Virus Comparison */}
+              <MetricCard
+                title="Flu vs Others"
+                value={`${metrics?.virusComparison.fluPercentage.toFixed(0)}%` || 'N/A'}
+                subtitle={`Flu: ${metrics?.virusComparison.flu || 0} | COVID: ${metrics?.virusComparison.covid || 0} | RSV: ${metrics?.virusComparison.rsv || 0}`}
+                color="purple"
+                icon={
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                }
+              />
             </div>
 
             {/* Main Chart */}
