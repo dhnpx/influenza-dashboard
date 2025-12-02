@@ -25,3 +25,20 @@ body {
     text-wrap: balance;
   }
 }
+
+/* Prevent small inline icon SVGs from being stretched to fill containers or the viewport.
+   This rule is conservative: it targets SVG elements that have Tailwind width/height classes
+   (e.g. `w-3`, `h-3`, `w-6`, etc.). It keeps explicit icon sizing from being overridden by
+   any global `svg { width:100% }`-style rules while avoiding changes to intentionally large
+   SVGs (maps, charts, illustrations) that don't use Tailwind w-/h- classes.
+*/
+@layer utilities {
+  svg[class*="w-"], svg[class*="h-"] {
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    display: inline-block;
+    vertical-align: middle;
+  }
+}
