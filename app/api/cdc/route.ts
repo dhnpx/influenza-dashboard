@@ -3,7 +3,9 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const state = searchParams.get('state');
-  const limit = searchParams.get('limit') || '1000';
+  // Reduced from 1000 to 200 to stay under Next.js 2MB cache limit
+  // 200 records ≈ 1.7MB, gives ~4 weeks of all states
+  const limit = searchParams.get('limit') || '200';
 
   try {
     // CDC RESP-NET - Respiratory Virus Hospitalization Surveillance Network
