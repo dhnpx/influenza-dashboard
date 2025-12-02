@@ -1,11 +1,16 @@
 export interface WastewaterData {
-  wwtp_id: string;
+  record_id: string;
+  sewershed_id: string;
+  wwtp_jurisdiction: string;
   sample_collect_date: string;
-  pcr_target_avg_conc: number | string;
-  state: string;
-  county?: string;
-  population_served?: number | string;
-  reporting_jurisdiction?: string;
+  pcr_target: string;
+  pcr_target_avg_conc: string;
+  pcr_target_avg_conc_lin: string;
+  pcr_target_units: string;
+  counties_served?: string;
+  population_served?: string;
+  county_fips?: string;
+  date_updated?: string;
 }
 
 export interface ProcessedWastewaterData {
