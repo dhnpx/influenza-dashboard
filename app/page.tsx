@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { format, subWeeks } from 'date-fns';
-import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -16,6 +15,7 @@ import {
 } from 'chart.js';
 import dynamic from 'next/dynamic';
 import MetricCard from './components/ui/MetricCard';
+import MultiLineChart from './components/charts/MultiLineChart';
 import { calculateWeekOverWeekChange, getTrendDirection, calculatePercentage, getDominantCategory } from '@/lib/utils/calculations';
 import { parseNumeric } from '@/lib/utils/formatters';
 import { WastewaterData } from '@/types/wastewater';
@@ -147,47 +147,7 @@ export default function Dashboard() {
     .sort((a, b) => new Date(a.weekendingdate).getTime() - new Date(b.weekendingdate).getTime())
     .slice(-parseInt(timeRange));
 
-  const chartData = {
-    labels: filteredData.map(item => format(new Date(item.weekendingdate), 'MMM d')),
-    datasets: [
-      {
-        label: 'Flu Hospital Patients',
-        data: filteredData.map(item => parseFloat(item.totalconffluhosppats || '0')),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4,
-        fill: true,
-      },
-    ],
-  };
-
-  const chartOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: 'Influenza Hospitalizations Over Time',
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        title: {
-          display: true,
-          text: 'Number of Patients',
-        },
-      },
-      x: {
-        title: {
-          display: true,
-          text: 'Week Ending',
-        },
-      },
-    },
-  };
+  const chartLabels = filteredData.map(item => format(new Date(item.weekendingdate), 'MMM d'));
 
   // Get latest data point for national data
   const latestData = nationalData[nationalData.length - 1];
@@ -259,7 +219,7 @@ export default function Dashboard() {
   const metrics = calculateMetrics();
 
   return (
-    <div className="min-h-screen bg-amber-50">
+    <div className="min-h-screen bg-amber-100">
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-bold text-gray-900">Influenza Surveillance Dashboard</h1>
@@ -357,7 +317,7 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Main Chart */}
+            {/* Main Chart - Enlarged */}
             <div className="mt-8 bg-white shadow rounded-lg p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-medium text-gray-900">Influenza Activity</h2>
@@ -373,8 +333,8 @@ export default function Dashboard() {
                   <option value="52">1 year</option>
                 </select>
               </div>
-              <div className="h-64">
-                <Line data={chartData} options={chartOptions} />
+              <div className="h-[700px]">
+                <MultiLineChart data={filteredData} labels={chartLabels} />
               </div>
             </div>
 

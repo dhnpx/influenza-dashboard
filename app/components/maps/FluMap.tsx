@@ -143,14 +143,14 @@ export default function FluMap({ data, wastewaterData = [], metric = 'per100k', 
 
   if (!isClient || !geoData) {
     return (
-      <div className="w-full h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
+      <div className="w-full h-[400px] bg-gray-100 rounded-lg flex items-center justify-center">
         <div className="text-gray-500">Loading map...</div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-[600px] rounded-lg overflow-hidden shadow-lg">
+    <div className="w-full h-[400px] rounded-lg overflow-hidden shadow-lg">
       <MapContainer
         center={[37.8, -96]}
         zoom={4}
