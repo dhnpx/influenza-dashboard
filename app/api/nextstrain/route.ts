@@ -75,7 +75,7 @@ function processNextstrainData(data: any) {
     
   const dateData = Object.entries(dates)
     .map(([date, count]) => ({ date, count }))
-    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB));
+    .sort((a, b) => a.date.localeCompare(b.date));
     
   return {
     clades: cladeData,

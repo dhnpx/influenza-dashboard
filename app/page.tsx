@@ -28,10 +28,11 @@ ChartJS.register(
 );
 
 type CDCData = {
-  week: string;
-  total_specimens: string;
-  percent_positive: string;
-  week_start: string;
+  weekendingdate: string;
+  jurisdiction: string;
+  totalconffluhosppats?: string;
+  totalconfflunewadm?: string;
+  pctconffluinptbeds?: string;
 };
 
 export default function Dashboard() {
@@ -61,17 +62,19 @@ export default function Dashboard() {
     fetchData();
   }, []);
 
-  // Process data for charts
-  const filteredData = cdcData
-    .sort((a, b) => new Date(a.week).getTime() - new Date(b.week).getTime())
+  // Process data for charts - aggregate by week (national level)
+  const nationalData = cdcData.filter(item => item.jurisdiction === 'USA');
+
+  const filteredData = nationalData
+    .sort((a, b) => new Date(a.weekendingdate).getTime() - new Date(b.weekendingdate).getTime())
     .slice(-parseInt(timeRange));
 
   const chartData = {
-    labels: filteredData.map(item => item.week),
+    labels: filteredData.map(item => format(new Date(item.weekendingdate), 'MMM d')),
     datasets: [
       {
-        label: 'Influenza Positive Tests (%)',
-        data: filteredData.map(item => parseFloat(item.percent_positive)),
+        label: 'Flu Hospital Patients',
+        data: filteredData.map(item => parseFloat(item.totalconffluhosppats || '0')),
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         tension: 0.4,
@@ -88,7 +91,7 @@ export default function Dashboard() {
       },
       title: {
         display: true,
-        text: 'Influenza Positive Tests Over Time',
+        text: 'Influenza Hospitalizations Over Time',
       },
     },
     scales: {
@@ -96,20 +99,20 @@ export default function Dashboard() {
         beginAtZero: true,
         title: {
           display: true,
-          text: 'Percentage Positive',
+          text: 'Number of Patients',
         },
       },
       x: {
         title: {
           display: true,
-          text: 'Week',
+          text: 'Week Ending',
         },
       },
     },
   };
 
-  // Get latest data point
-  const latestData = cdcData[cdcData.length - 1];
+  // Get latest data point for national data
+  const latestData = nationalData[nationalData.length - 1];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -154,10 +157,10 @@ export default function Dashboard() {
                     </div>
                     <div className="ml-5 w-0 flex-1">
                       <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Current Week</dt>
+                        <dt className="text-sm font-medium text-gray-500 truncate">Latest Update</dt>
                         <dd className="flex items-baseline">
                           <div className="text-2xl font-semibold text-gray-900">
-                            {latestData?.week || 'N/A'}
+                            {latestData ? format(new Date(latestData.weekendingdate), 'MMM d') : 'N/A'}
                           </div>
                         </dd>
                       </dl>
@@ -176,10 +179,10 @@ export default function Dashboard() {
                     </div>
                     <div className="ml-5 w-0 flex-1">
                       <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Positive Tests</dt>
+                        <dt className="text-sm font-medium text-gray-500 truncate">Hospital Patients</dt>
                         <dd className="flex items-baseline">
                           <div className="text-2xl font-semibold text-gray-900">
-                            {latestData ? `${parseFloat(latestData.percent_positive).toFixed(1)}%` : 'N/A'}
+                            {latestData?.totalconffluhosppats || 'N/A'}
                           </div>
                         </dd>
                       </dl>
@@ -198,10 +201,10 @@ export default function Dashboard() {
                     </div>
                     <div className="ml-5 w-0 flex-1">
                       <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Total Specimens</dt>
+                        <dt className="text-sm font-medium text-gray-500 truncate">New Admissions</dt>
                         <dd className="flex items-baseline">
                           <div className="text-2xl font-semibold text-gray-900">
-                            {latestData?.total_specimens || 'N/A'}
+                            {latestData?.totalconfflunewadm || 'N/A'}
                           </div>
                         </dd>
                       </dl>
@@ -239,20 +242,22 @@ export default function Dashboard() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Specimens</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Positive Tests (%)</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week Start</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week Ending</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hospital Patients</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Admissions</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">% Inpatient Beds</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredData.slice(-10).reverse().map((item, index) => (
                       <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.week}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.total_specimens}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{parseFloat(item.percent_positive).toFixed(1)}%</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {format(new Date(item.weekendingdate), 'MMM d, yyyy')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.totalconffluhosppats || '0'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.totalconfflunewadm || '0'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {item.week_start ? format(new Date(item.week_start), 'MMM d, yyyy') : 'N/A'}
+                          {item.pctconffluinptbeds ? `${(parseFloat(item.pctconffluinptbeds) * 100).toFixed(2)}%` : 'N/A'}
                         </td>
                       </tr>
                     ))}
