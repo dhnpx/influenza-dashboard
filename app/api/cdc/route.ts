@@ -3,18 +3,20 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const state = searchParams.get('state');
-  // Reduced from 1000 to 200 to stay under Next.js 2MB cache limit
-  // 200 records ≈ 1.7MB, gives ~4 weeks of all states
-  const limit = searchParams.get('limit') || '200';
+  const jurisdiction = searchParams.get('jurisdiction');
+  // Increased to 500 for ~7-8 weeks of historical data
+  // 500 records ≈ 3.2MB (still under 4MB threshold)
+  const limit = searchParams.get('limit') || '500';
 
   try {
     // CDC RESP-NET - Respiratory Virus Hospitalization Surveillance Network
     // Dataset: mpgq-jmmr - includes flu hospitalization data by state
     let cdcUrl = `https://data.cdc.gov/resource/mpgq-jmmr.json?$limit=${limit}&$order=weekendingdate DESC`;
 
-    // Filter by state (jurisdiction) if provided
-    if (state) {
-      cdcUrl += `&jurisdiction=${state.toUpperCase()}`;
+    // Filter by state or jurisdiction if provided
+    const filterValue = jurisdiction || state;
+    if (filterValue) {
+      cdcUrl += `&jurisdiction=${filterValue.toUpperCase()}`;
     }
 
     const response = await fetch(cdcUrl, {
