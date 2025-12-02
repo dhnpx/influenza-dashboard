@@ -70,9 +70,17 @@ export default function MetricCard({
   ) : null;
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
+    <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200 border-2 border-gray-200 flex items-center justify-center min-h-[160px]">
+      <div className="flex flex-col items-center justify-center text-center w-full space-y-3">
+        {icon && (
+          <div className={`flex-shrink-0 p-2 rounded-full ${colorClasses[color].icon}`}>
+            <div className="w-6 h-6 flex items-center justify-center">
+              {icon}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col items-center justify-center">
           <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
           <p className="text-3xl font-bold text-gray-900 mb-2">{value}</p>
 
@@ -95,7 +103,7 @@ export default function MetricCard({
           )}
 
           {progress !== undefined && (
-            <div className="mt-3">
+            <div className="mt-3 w-full">
               <div className="flex justify-between text-xs text-gray-600 mb-1">
                 <span>Capacity</span>
                 <span>{progress.toFixed(1)}%</span>
@@ -109,14 +117,6 @@ export default function MetricCard({
             </div>
           )}
         </div>
-
-        {icon && (
-                  <div className={`flex-shrink-0 p-1 rounded-full ${colorClasses[color].icon}`}>
-          <div className="w-6 h-6 flex items-center justify-center">
-            {icon}
-          </div>
-        </div>
-        )}
       </div>
     </div>
   );
