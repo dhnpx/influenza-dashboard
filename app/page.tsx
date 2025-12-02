@@ -18,6 +18,8 @@ import dynamic from 'next/dynamic';
 import MetricCard from './components/ui/MetricCard';
 import { calculateWeekOverWeekChange, getTrendDirection, calculatePercentage, getDominantCategory } from '@/lib/utils/calculations';
 import { parseNumeric } from '@/lib/utils/formatters';
+import { WastewaterData } from '@/types/wastewater';
+import { processWastewaterData, calculateNationalAverage } from '@/lib/utils/wastewaterProcessing';
 
 // Dynamic import for map to avoid SSR issues with Leaflet
 const FluMap = dynamic(() => import('./components/maps/FluMap'), {
@@ -30,6 +32,28 @@ const FluMap = dynamic(() => import('./components/maps/FluMap'), {
 });
 
 const MapLegend = dynamic(() => import('./components/maps/MapLegend'), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200 h-48 animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+      <div className="space-y-2">
+        {[1,2,3,4].map(i => (
+          <div key={i} className="h-4 bg-gray-100 rounded"></div>
+        ))}
+      </div>
+    </div>
+  ),
+});
+
+const MapControls = dynamic(() => import('./components/maps/MapControls'), {
+  ssr: false,
+});
+
+const StateDetailPanel = dynamic(() => import('./components/maps/StateDetailPanel'), {
+  ssr: false,
+});
+
+const WastewaterInfoPanel = dynamic(() => import('./components/maps/WastewaterInfoPanel'), {
   ssr: false,
 });
 
@@ -71,9 +95,12 @@ export default function Dashboard() {
   // Separate state for chart (national data) and map (all states)
   const [nationalData, setNationalData] = useState<CDCData[]>([]);
   const [stateData, setStateData] = useState<CDCData[]>([]);
+  const [wastewaterData, setWastewaterData] = useState<WastewaterData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState('12'); // 12 weeks by default
+  const [mapMetric, setMapMetric] = useState<'patients' | 'admissions' | 'per100k' | 'wastewater'>('per100k');
+  const [selectedState, setSelectedState] = useState<{ code: string; name: string } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -95,6 +122,15 @@ export default function Dashboard() {
         }
         const states = await stateResponse.json();
         setStateData(states);
+
+        // Fetch wastewater surveillance data
+        const wastewaterResponse = await fetch('/api/wastewater?limit=500');
+        if (wastewaterResponse.ok) {
+          const wastewater = await wastewaterResponse.json();
+          setWastewaterData(wastewater);
+        } else {
+          console.warn('Wastewater data not available');
+        }
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load data. Please try again later.');
@@ -223,7 +259,7 @@ export default function Dashboard() {
   const metrics = calculateMetrics();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-amber-50">
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-bold text-gray-900">Influenza Surveillance Dashboard</h1>
@@ -254,7 +290,7 @@ export default function Dashboard() {
         ) : (
           <>
             {/* Enhanced Metric Cards */}
-            <div className="grid grid-cols-1 gap-5 mt-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-5 gap-4 mt-6">
               {/* Card 1: Total Flu Patients */}
               <MetricCard
                 title="Flu Patients"
@@ -286,7 +322,6 @@ export default function Dashboard() {
                 title="ICU Patients"
                 value={metrics?.icuPatients.toLocaleString() || 'N/A'}
                 subtitle="Flu in ICU"
-                progress={metrics?.icuOccupancy}
                 color="orange"
                 icon={
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -295,21 +330,7 @@ export default function Dashboard() {
                 }
               />
 
-              {/* Card 4: Bed Utilization */}
-              <MetricCard
-                title="Bed Utilization"
-                value={`${metrics?.bedUtilization.toFixed(1)}%` || 'N/A'}
-                subtitle="Inpatient beds occupied"
-                progress={metrics?.bedUtilization}
-                color={metrics && metrics.bedUtilization > 80 ? 'red' : 'purple'}
-                icon={
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                  </svg>
-                }
-              />
-
-              {/* Card 5: Age Group Alert */}
+              {/* Card 4: Highest Risk Group */}
               <MetricCard
                 title="Highest Risk Group"
                 value={metrics?.dominantAgeGroup || 'N/A'}
@@ -322,7 +343,7 @@ export default function Dashboard() {
                 }
               />
 
-              {/* Card 6: Multi-Virus Comparison */}
+              {/* Card 5: Multi-Virus Comparison */}
               <MetricCard
                 title="Flu vs Others"
                 value={`${metrics?.virusComparison.fluPercentage.toFixed(0)}%` || 'N/A'}
@@ -352,10 +373,11 @@ export default function Dashboard() {
                   <option value="52">1 year</option>
                 </select>
               </div>
-              <div className="h-96">
+              <div className="h-64">
                 <Line data={chartData} options={chartOptions} />
               </div>
             </div>
+
 
             {/* Geographic Heat Map */}
             <div className="mt-8 bg-white shadow rounded-lg p-6">
@@ -364,14 +386,41 @@ export default function Dashboard() {
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 <div className="lg:col-span-3">
-                  <FluMap data={stateData} metric="per100k" />
+                  <FluMap
+                    data={stateData}
+                    wastewaterData={processWastewaterData(wastewaterData)}
+                    metric={mapMetric}
+                    onStateClick={(code, name) => setSelectedState({ code, name })}
+                  />
                 </div>
-                <div className="lg:col-span-1">
-                  <MapLegend />
+                <div className="lg:col-span-1 space-y-4">
+                  <MapControls
+                    metric={mapMetric}
+                    onMetricChange={setMapMetric}
+                  />
+                  <MapLegend metric={mapMetric} />
+                  {mapMetric === 'wastewater' && wastewaterData.length > 0 ? (
+                    <WastewaterInfoPanel data={wastewaterData} />
+                  ) : selectedState ? (
+                    <StateDetailPanel
+                      stateName={selectedState.name}
+                      stateCode={selectedState.code}
+                      data={
+                        stateData
+                          .filter(d => d.jurisdiction === selectedState.code)
+                          .sort((a, b) => new Date(b.weekendingdate).getTime() - new Date(a.weekendingdate).getTime())[0] || null
+                      }
+                      onClose={() => setSelectedState(null)}
+                    />
+                  ) : null}
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-4">
-                Showing new flu admissions per 100,000 population by state. Hover over states for details.
+                {mapMetric === 'per100k' && 'Showing new flu admissions per 100,000 population by state.'}
+                {mapMetric === 'admissions' && 'Showing total new flu admissions by state.'}
+                {mapMetric === 'patients' && 'Showing total current flu patients by state.'}
+                {mapMetric === 'wastewater' && 'Showing influenza A viral RNA concentration in wastewater by state (early warning indicator).'}
+                {mapMetric !== 'wastewater' && ' Click on a state for details.'}
               </p>
             </div>
 
@@ -385,7 +434,6 @@ export default function Dashboard() {
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week Ending</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hospital Patients</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Admissions</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">% Inpatient Beds</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -396,9 +444,6 @@ export default function Dashboard() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.totalconffluhosppats || '0'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.totalconfflunewadm || '0'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {item.pctconffluinptbeds ? `${(parseFloat(item.pctconffluinptbeds) * 100).toFixed(2)}%` : 'N/A'}
-                        </td>
                       </tr>
                     ))}
                   </tbody>
